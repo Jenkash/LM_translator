@@ -1,0 +1,10 @@
+mss
+numpy
+# easyocr
+# argostranslate
+pynput
+Pillow
+opencv-python
+pytesseract
+deep-translator
+openai
