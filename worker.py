@@ -2,6 +2,7 @@
 import threading
 import queue
 import time
+import traceback
 
 import config
 from capture import capture_screen
@@ -15,32 +16,23 @@ else:
 
 task_queue = queue.Queue()
 
-
 def on_capture():
-    """Вызывается при нажатии горячей клавиши (F8)."""
-    task_queue.put(('clear',))  # Сначала убираем старые оверлеи
+    task_queue.put(('clear',))
     threading.Thread(target=_process_capture, daemon=True).start()
 
-
 def on_clear():
-    """Вызывается при нажатии клавиши очистки (F9)."""
     task_queue.put(('clear',))
 
-
 def _process_local(img):
-    """Локальный пайплайн: EasyOCR + Argos/Google."""
     t0 = time.perf_counter()
-
     blocks = recognize(img)
     t1 = time.perf_counter()
 
     filtered = []
     for b in blocks:
-        if b['conf'] < config.MIN_CONFIDENCE:
-            continue
+        if b['conf'] < config.MIN_CONFIDENCE: continue
         text = b['text'].strip()
-        if len(text) < config.MIN_TEXT_LEN:
-            continue
+        if len(text) < config.MIN_TEXT_LEN: continue
         b['text'] = text
         filtered.append(b)
 
@@ -50,26 +42,19 @@ def _process_local(img):
 
     final = []
     for b, tr in zip(filtered, translations):
-        # Если перевод пустой или совпадает с оригиналом — пропускаем
         if tr and tr.strip().lower() != b['text'].strip().lower():
             b['translation'] = tr
             final.append(b)
 
     return final, (t1 - t0, t2 - t1), len(blocks)
 
-
 def _process_vision(img):
-    """Облачный или локальный AI пайплайн: TokenHarbor или LM Studio."""
     t0 = time.perf_counter()
-    # Функция translate_screenshot сама знает, к какому серверу обращаться,
-    # благодаря настройкам в config.py
     blocks = translate_screenshot(img)
     t1 = time.perf_counter()
     return blocks, (0.0, t1 - t0), len(blocks)
 
-
 def _process_capture():
-    """Основная функция обработки кадра."""
     try:
         img, monitor = capture_screen()
 
@@ -83,18 +68,13 @@ def _process_capture():
               f"translate: {timings[1]:.2f}s  "
               f"blocks: {len(final)}/{total}")
 
-        # Отправляем результат в главный поток для отрисовки
         task_queue.put(('show', final, monitor))
         
     except Exception as e:
-        print("Ошибка обработки кадра:", e)
-
+        print("\n[ERROR in _process_capture]:")
+        traceback.print_exc()
 
 def pump_queue(root, overlay):
-    """
-    Вызывается из главного потока Tkinter по таймеру.
-    Забирает результаты из очереди и обновляет оверлеи.
-    """
     try:
         while True:
             cmd, *args = task_queue.get_nowait()
@@ -102,6 +82,10 @@ def pump_queue(root, overlay):
                 overlay.clear()
             elif cmd == 'show':
                 blocks, monitor = args
+                print(f"[DEBUG] Рисуем {len(blocks)} блоков на экране...")
+                if blocks:
+                    print(f"[DEBUG] Координаты первого блока: x1={blocks[0]['x1']}, y1={blocks[0]['y1']}")
+                
                 overlay.show_blocks(
                     blocks,
                     offset_x=monitor['left'],
@@ -109,5 +93,8 @@ def pump_queue(root, overlay):
                 )
     except queue.Empty:
         pass
-    # Планируем следующий вызов через 80 мс
+    except Exception as e:
+        print("\n[ERROR in pump_queue]:")
+        traceback.print_exc()
+        
     root.after(80, pump_queue, root, overlay)

@@ -7,22 +7,31 @@ import cv2
 from PIL import Image
 from openai import OpenAI
 import config
+import settings_manager
 
 _client = None
 
 def _get_client():
     global _client
     if _client is None:
-        if config.VISION_ENGINE == "lmstudio":
+        # Читаем актуальные настройки с диска прямо сейчас
+        s = settings_manager.load_settings() or {}
+        engine = s.get("VISION_ENGINE", "tokenharbor")
+        
+        if engine == "lmstudio":
             _client = OpenAI(
-                api_key=config.LMSTUDIO_API_KEY,
-                base_url=config.LMSTUDIO_BASE_URL,
+                api_key="lm-studio",
+                base_url=s.get("LMSTUDIO_BASE_URL", "http://localhost:1234/v1"),
                 timeout=120.0,
             )
         else:
+            api_key = s.get("TOKENHARBOR_API_KEY", "").strip()
+            if not api_key:
+                raise ValueError("API-ключ не указан в настройках! Закройте программу и запустите заново, чтобы ввести его.")
+            
             _client = OpenAI(
-                api_key=config.TOKENHARBOR_API_KEY,
-                base_url=config.TOKENHARBOR_BASE_URL, 
+                api_key=api_key,
+                base_url=s.get("TOKENHARBOR_BASE_URL", "https://tokenharbor.ai/v1"), 
                 timeout=120.0,
             )
     return _client
@@ -73,11 +82,9 @@ def _parse_blocks(raw_text, scale_back, orig_w, orig_h):
             x1, x2 = x1 * orig_w, x2 * orig_w
             y1, y2 = y1 * orig_h, y2 * orig_h
         else:
-            # Умножаем на коэффициент, чтобы вернуть координаты к исходному экрану (1920x1080)
             x1, x2 = x1 * scale_back, x2 * scale_back
             y1, y2 = y1 * scale_back, y2 * scale_back
 
-        # Ограничиваем границами экрана
         x1, x2 = max(0, min(x1, orig_w)), max(0, min(x2, orig_w))
         y1, y2 = max(0, min(y1, orig_h)), max(0, min(y2, orig_h))
 
@@ -92,15 +99,23 @@ def _parse_blocks(raw_text, scale_back, orig_w, orig_h):
     return result
 
 def translate_screenshot(img_rgb):
+    # Читаем настройки напрямую из файла для промпта
+    s = settings_manager.load_settings() or {}
+    target_lang = s.get("TARGET_LANG_NAME", "Russian")
+    
+    # Определяем имя модели
+    if s.get("VISION_ENGINE") == "lmstudio":
+        model_name = s.get("LMSTUDIO_MODEL", "minicpm-v-2_6")
+    else:
+        model_name = s.get("TOKENHARBOR_MODEL", "deepseek-v4.1-flash:free")
+
     orig_h, orig_w = img_rgb.shape[:2]
     resized, scale = _resize_if_needed(img_rgb)
     scale_back = 1.0 / scale if scale > 0 else 1.0
     
-    # Получаем РЕАЛЬНЫЙ размер картинки, которую мы отправляем
     send_w, send_h = resized.shape[1], resized.shape[0]
     b64_url = _encode_image(resized)
 
-    # В промпте честно указываем размер отправляемой картинки
     prompt = f"""
 Ты — OCR-переводчик игрового интерфейса.
 Размер изображения: {send_w} x {send_h} пикселей.
@@ -108,7 +123,7 @@ def translate_screenshot(img_rgb):
 Найди весь читаемый текст. Для каждого блока верни JSON:
 - "bbox": [x1, y1, x2, y2] (в пикселях от 0 до {send_w} и от 0 до {send_h})
 - "text": оригинал
-- "translation": перевод на русский
+- "translation": перевод на {target_lang}
 
 ПРАВИЛА:
 1. Каждый отдельный пункт меню, строка или независимое предложение — это ОТДЕЛЬНЫЙ блок.
@@ -119,23 +134,23 @@ def translate_screenshot(img_rgb):
 /no_think
 """
 
-    model_name = config.LMSTUDIO_MODEL if config.VISION_ENGINE == "lmstudio" else config.TOKENHARBOR_MODEL
-
-    resp = _get_client().chat.completions.create(
-        model=model_name,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": b64_url}},
-            ],
-        }],
-        temperature=0.0,
-        max_tokens=config.VISION_MAX_TOKENS,
-        # Отключаем режим размышлений для DeepSeek
-        extra_body={"thinking": {"type": "disabled"}}
-    )
+    try:
+        resp = _get_client().chat.completions.create(
+            model=model_name,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": b64_url}},
+                ],
+            }],
+            temperature=0.0,
+            max_tokens=config.VISION_MAX_TOKENS,
+            extra_body={"thinking": {"type": "disabled"}}
+        )
+    except Exception as e:
+        print(f"[API ERROR] {e}")
+        return []
 
     raw = resp.choices[0].message.content
-    # Передаем scale_back, чтобы координаты вернулись на исходный экран
     return _parse_blocks(raw, scale_back, orig_w, orig_h)

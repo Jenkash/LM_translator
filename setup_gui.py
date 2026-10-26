@@ -3,17 +3,34 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import settings_manager
 
+# Словарь: Отображаемое имя -> (Код, Английское имя для промпта)
+LANGUAGES = {
+    "Английский": ("en", "English"),
+    "Русский": ("ru", "Russian"),
+    "Белорусский": ("be", "Belarusian"),
+    "Польский": ("pl", "Polish"),
+    "Украинский": ("uk", "Ukrainian"),
+    "Немецкий": ("de", "German"),
+    "Испанский": ("es", "Spanish"),
+    "Французский": ("fr", "French"),
+    "Итальянский": ("it", "Italian"),
+    "Португальский": ("pt", "Portuguese")
+}
+
 class SetupWindow:
     def __init__(self, root):
         self.root = root
         self.root.title("Настройки переводчика")
-        self.root.geometry("480x520")
+        self.root.geometry("480x650") # Увеличили высоту для новых полей
         self.root.resizable(False, False)
         self.saved = False
         
         self.settings = settings_manager.load_settings() or {
             "GAME_MODE": "arknights",
             "VISION_ENGINE": "tokenharbor",
+            "FROM_LANG": "en",
+            "TO_LANG": "ru",
+            "TARGET_LANG_NAME": "Russian",
             "TOKENHARBOR_API_KEY": "",
             "TOKENHARBOR_BASE_URL": "https://tokenharbor.ai/v1",
             "TOKENHARBOR_MODEL": "deepseek-v4.1-flash:free",
@@ -31,7 +48,32 @@ class SetupWindow:
         ttk.Radiobutton(frame_game, text="Arknights (только нижняя часть)", variable=self.var_game, value="arknights").pack(anchor="w", padx=5, pady=2)
         ttk.Radiobutton(frame_game, text="Полный экран (для любых других игр)", variable=self.var_game, value="default").pack(anchor="w", padx=5, pady=2)
 
-        # 2. Выбор движка
+        # 2. Выбор языков
+        frame_lang = ttk.LabelFrame(self.root, text="Языки")
+        frame_lang.pack(fill="x", padx=10, pady=5)
+        
+        # Язык игры (Source)
+        ttk.Label(frame_lang, text="Язык текста в игре:").grid(row=0, column=0, sticky="w", padx=5, pady=2)
+        self.combo_from = ttk.Combobox(frame_lang, values=list(LANGUAGES.keys()), state="readonly")
+        self.combo_from.grid(row=0, column=1, sticky="w", padx=5, pady=2)
+        
+        # Язык перевода (Target)
+        ttk.Label(frame_lang, text="Переводить на:").grid(row=1, column=0, sticky="w", padx=5, pady=2)
+        self.combo_to = ttk.Combobox(frame_lang, values=list(LANGUAGES.keys()), state="readonly")
+        self.combo_to.grid(row=1, column=1, sticky="w", padx=5, pady=2)
+
+        # Устанавливаем сохраненные значения
+        from_code = self.settings.get("FROM_LANG", "en")
+        to_code = self.settings.get("TO_LANG", "ru")
+        
+        for name, (code, eng_name) in LANGUAGES.items():
+            if code == from_code: self.combo_from.set(name)
+            if code == to_code: self.combo_to.set(name)
+            
+        if not self.combo_from.get(): self.combo_from.set("Английский")
+        if not self.combo_to.get(): self.combo_to.set("Русский")
+
+        # 3. Выбор движка
         frame_engine = ttk.LabelFrame(self.root, text="Движок распознавания")
         frame_engine.pack(fill="x", padx=10, pady=5)
         
@@ -39,7 +81,7 @@ class SetupWindow:
         ttk.Radiobutton(frame_engine, text="Облачный API (TokenHarbor, OpenRouter и др.)", variable=self.var_engine, value="tokenharbor", command=self.update_fields).pack(anchor="w", padx=5, pady=2)
         ttk.Radiobutton(frame_engine, text="LM Studio (Локальный AI)", variable=self.var_engine, value="lmstudio", command=self.update_fields).pack(anchor="w", padx=5, pady=2)
 
-        # 3. Поля API
+        # 4. Поля API
         self.frame_api = ttk.LabelFrame(self.root, text="Настройки облачного API (OpenAI-совместимый)")
         self.frame_api.pack(fill="x", padx=10, pady=5)
         
@@ -58,7 +100,7 @@ class SetupWindow:
         self.entry_model.grid(row=2, column=1, padx=5, pady=2)
         self.entry_model.insert(0, self.settings.get("TOKENHARBOR_MODEL", "deepseek-v4.1-flash:free"))
 
-        # 4. Кнопка старта
+        # 5. Кнопка старта
         self.btn_start = ttk.Button(self.root, text="Сохранить и запустить", command=self.start)
         self.btn_start.pack(pady=20)
 
@@ -75,11 +117,22 @@ class SetupWindow:
             self.entry_model.config(state="disabled")
 
     def start(self):
+        # Сохраняем игру и движок
         self.settings["GAME_MODE"] = self.var_game.get()
         self.settings["VISION_ENGINE"] = self.var_engine.get()
         self.settings["TOKENHARBOR_BASE_URL"] = self.entry_url.get().strip()
         self.settings["TOKENHARBOR_API_KEY"] = self.entry_key.get().strip()
         self.settings["TOKENHARBOR_MODEL"] = self.entry_model.get().strip()
+        
+        # Сохраняем языки
+        from_name = self.combo_from.get()
+        to_name = self.combo_to.get()
+        
+        if from_name in LANGUAGES:
+            self.settings["FROM_LANG"] = LANGUAGES[from_name][0]
+        if to_name in LANGUAGES:
+            self.settings["TO_LANG"] = LANGUAGES[to_name][0]
+            self.settings["TARGET_LANG_NAME"] = LANGUAGES[to_name][1]
         
         if self.settings["VISION_ENGINE"] == "tokenharbor" and not self.settings["TOKENHARBOR_API_KEY"]:
             messagebox.showerror("Ошибка", "Введите API-ключ!")

@@ -9,7 +9,12 @@ saved = settings_manager.load_settings() or {}
 GAME_MODE = saved.get("GAME_MODE", "arknights")
 VISION_ENGINE = saved.get("VISION_ENGINE", "tokenharbor")
 
-# 2. НАСТРОЙКИ API
+# 2. ЯЗЫКОВЫЕ НАСТРОЙКИ
+FROM_LANG = saved.get("FROM_LANG", "en")
+TO_LANG = saved.get("TO_LANG", "ru")
+TARGET_LANG_NAME = saved.get("TARGET_LANG_NAME", "Russian")
+
+# 3. НАСТРОЙКИ API
 TOKENHARBOR_API_KEY  = saved.get("TOKENHARBOR_API_KEY", "")
 TOKENHARBOR_BASE_URL = saved.get("TOKENHARBOR_BASE_URL", "https://tokenharbor.ai/v1")
 TOKENHARBOR_MODEL    = saved.get("TOKENHARBOR_MODEL", "deepseek-v4.1-flash:free")
@@ -23,10 +28,7 @@ VISION_TEMPERATURE   = 0.0
 VISION_MAX_WIDTH     = 1024
 VISION_MAX_HEIGHT    = 576
 
-# 3. ГОРЯЧИЕ КЛАВИШИ
-FROM_LANG = "en"
-TO_LANG   = "ru"
-
+# 4. ГОРЯЧИЕ КЛАВИШИ
 HOTKEY_CAPTURE = "<f8>"
 HOTKEY_CLEAR   = "<f9>"
 HOTKEY_EXIT    = "<f10>" 
@@ -35,7 +37,7 @@ HOTKEY_EXIT    = "<f10>"
 CAPTURE_REGION = None
 
 # ==========================================
-# 4. НАСТРОЙКИ ОВЕРЛЕЯ (ОКОШЕК)
+# 5. НАСТРОЙКИ ОВЕРЛЕЯ (ОКОШЕК)
 # ==========================================
 OVERLAY_ALPHA     = 0.85
 OVERLAY_BG        = "black"
@@ -43,7 +45,7 @@ OVERLAY_FG        = "white"
 OVERLAY_FONT      = ("Arial", 12)
 
 # ==========================================
-# 5. ЛОКАЛЬНЫЙ OCR (Если VISION_ENGINE = "local")
+# 6. ЛОКАЛЬНЫЙ OCR (Если VISION_ENGINE = "local")
 # ==========================================
 USE_GPU            = True
 DETECT_NETWORK     = "craft"

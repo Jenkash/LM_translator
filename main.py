@@ -1,6 +1,14 @@
 # main.py
+import ctypes
 import tkinter as tk
 from tkinter import ttk
+
+# Отключаем масштабирование Windows для нашей программы (КРИТИЧНО ДЛЯ НОУТБУКОВ)
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(2) # Для Windows 8.1+
+except Exception:
+    ctypes.windll.user32.SetProcessDPIAware()      # Для старых Windows
+
 import config
 from setup_gui import SetupWindow
 from overlay import OverlayManager
@@ -21,8 +29,6 @@ def main():
     root.title("Переводчик активен")
     root.geometry("350x120")
     root.resizable(False, False)
-    
-    # Делаем окно поверх других, но не забираем фокус у игры постоянно
     root.attributes('-topmost', True)
 
     lbl = ttk.Label(root, text="Переводчик запущен!\nF8 - Перевести\nF9 - Убрать окошки\nF10 или кнопка - Выход", justify="center", font=("Arial", 10))
@@ -30,23 +36,16 @@ def main():
 
     overlay = OverlayManager(root)
 
-    # Функция корректного завершения
     def close_app():
         listener.stop()
         root.quit()
         root.destroy()
 
-    # Кнопка выхода
     btn_quit = ttk.Button(root, text="Завершить работу", command=close_app)
     btn_quit.pack()
-    
-    # Перехват нажатия на крестик окна
     root.protocol("WM_DELETE_WINDOW", close_app)
 
-    # 3. Запуск горячих клавиш (передаем close_app для F10)
     listener = start_hotkeys(on_capture, on_clear, close_app, root)
-    
-    # 4. Очередь оверлея
     root.after(80, pump_queue, root, overlay)
 
     print(f"Запущено. F8 - перевести, F9 - убрать, F10 - выход.")
